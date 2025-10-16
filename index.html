@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>英単語テスト</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            padding-top: 40px;
+        }
+
+        h1 { text-align: center; }
+
+        .container {
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        label { font-size: 18px; margin-right: 10px; }
+
+        input {
+            font-size: 16px;
+            padding: 5px;
+            margin: 10px;
+        }
+
+        button {
+            font-size: 18px;
+            padding: 10px 20px;
+            margin: 10px;
+            cursor: pointer;
+        }
+
+        #timer {
+            font-size: 24px;
+            font-weight: bold;
+            color: #d9534f;
+        }
+
+        #question, #answer, #result {
+            font-size: 18px;
+            margin-top: 20px;
+        }
+
+        #timerContainer {
+            margin-top: 20px;
+            font-size: 30px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        table {
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid #999;
+            padding: 8px 12px;
+        }
+
+        th {
+            background-color: #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>英単語テスト</h1>
+
+    <div class="container">
+        <label for="startRange">開始番号:</label>
+        <input type="number" id="startRange" value="1" min="1"><br>
+
+        <label for="endRange">終了番号:</label>
+        <input type="number" id="endRange" value="75" min="1"><br>
+
+        <button id="startButton">スタート</button>
+    </div>
+
+    <div id="timerContainer" style="display:none;">
+        <div id="timer">30:00</div>
+    </div>
+
+    <div id="question"></div>
+    <div id="answer"></div>
+    <div id="result"></div>
+
+<script>
+    let allWords = [];
+    let currentQuestionIndex = 0;
+    let correctAnswers = 0;
+    let testWords = [];
+    let timerInterval;
+    let timeRemaining = 1800;
+    let userAnswers = [];  // 解答記録用配列
+
+    async function loadWords() {
+        try {
+            const response = await fetch('words.json');
+            const data = await response.json();
+            allWords = data;
+        } catch (error) {
+            alert("単語リストの読み込みに失敗しました。");
+        }
+    }
+
+    function selectWordsInRange(start, end, numWords) {
+        const filteredWords = allWords.filter(word => word.id >= start && word.id <= end);
+        if (filteredWords.length < numWords) {
+            alert(`指定した範囲に${numWords}単語が足りません！`);
+            return [];
+        }
+        return shuffleArray(filteredWords).slice(0, numWords);
+    }
+
+    function shuffleArray(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    function updateTimer() {
+        let minutes = Math.floor(timeRemaining / 60);
+        let seconds = timeRemaining % 60;
+        if (seconds < 10) seconds = '0' + seconds;
+        document.getElementById('timer').textContent = `${minutes}:${seconds}`;
+        timeRemaining--;
+
+        if (timeRemaining < 0) {
+            clearInterval(timerInterval);
+            alert('30分が経過しました！テストを開始します。');
+            startTest();
+        }
+    }
+
+    function startTest() {
+        currentQuestionIndex = 0;
+        correctAnswers = 0;
+        userAnswers = [];
+        showQuestion(testWords[currentQuestionIndex]);
+    }
+
+    function showQuestion(word) {
+        document.getElementById('question').textContent = `日本語: ${word.jp}`;
+        document.getElementById('answer').innerHTML = `
+            英語: <input type="text" id="userAnswer" placeholder="英語の答えを入力">
+            <br>カタカナ: <input type="text" id="userKatakanaAnswer" placeholder="カタカナの答えを入力">
+            <button onclick="checkAnswer()">答える</button>`;  <!-- ✅ 修正 -->
+    }
+
+    function checkAnswer() {
+        const word = testWords[currentQuestionIndex];  // ✅ 現在の問題を直接取得
+        const userAnswer = document.getElementById('userAnswer').value.trim();
+        const userKatakanaAnswer = document.getElementById('userKatakanaAnswer').value.trim();
+
+        userAnswers.push({
+            jp: word.jp,
+            correct: word.en,
+            user: userAnswer,
+            katakana: userKatakanaAnswer
+        });
+
+        if (userAnswer.toLowerCase() === word.en.toLowerCase()) {
+            correctAnswers++;
+        }
+
+        currentQuestionIndex++;
+
+        if (currentQuestionIndex < 30) {
+            showQuestion(testWords[currentQuestionIndex]);
+        } else {
+            showResults();
+        }
+    }
+
+    function showResults() {
+        document.getElementById('question').style.display = 'none';
+        document.getElementById('answer').style.display = 'none';
+
+        let resultHTML = `<h2>テスト終了！</h2><p>正解数: ${correctAnswers} / 30</p>`;
+        resultHTML += `<table>
+            <tr><th>日本語</th><th>正解（英語）</th><th>あなたの答え</th><th>カタカナ</th></tr>`;
+
+        userAnswers.forEach(a => {
+            const isCorrect = a.user.toLowerCase() === a.correct.toLowerCase();
+            resultHTML += `
+                <tr style="background-color:${isCorrect ? '#c8e6c9' : '#ffcdd2'}">
+                    <td>${a.jp}</td>
+                    <td>${a.correct}</td>
+                    <td>${a.user}</td>
+                    <td>${a.katakana}</td>
+                </tr>`;
+        });
+
+        resultHTML += `</table>`;
+        document.getElementById('result').innerHTML = resultHTML;
+    }
+
+    document.getElementById('startButton').addEventListener('click', async function() {
+        await loadWords();
+
+        const startRange = parseInt(document.getElementById('startRange').value, 10);
+        const endRange = parseInt(document.getElementById('endRange').value, 10);
+        const numWords = 30;
+
+        testWords = selectWordsInRange(startRange, endRange, numWords);
+        if (testWords.length > 0) {
+            document.getElementById('startButton').style.display = 'none';
+            document.getElementById('timerContainer').style.display = 'block';
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+    });
+</script>
