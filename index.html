@@ -82,7 +82,7 @@
         <label for="endRange">終了番号:</label>
         <input type="number" id="endRange" value="75" min="1"><br>
 <label for="testTime">テスト時間（分）:</label>
-<input type="number" id="testTime" value="30" min="1" max="120"><br>
+<input type="number" id="testTime" value="30" min="0" max="120"><br>
 
         <button id="startButton">スタート</button>
     </div>
@@ -114,14 +114,29 @@
         }
     }
 
-    function selectWordsInRange(start, end, numWords) {
-        const filteredWords = allWords.filter(word => word.id >= start && word.id <= end);
-        if (filteredWords.length < numWords) {
-            alert(`指定した範囲に${numWords}単語が足りません！`);
-            return [];
-        }
+function selectWordsInRange(start, end, numWords) {
+    const filteredWords = allWords.filter(word => word.id >= start && word.id <= end);
+
+    // 🟥 範囲に単語が1つもない場合 → 警告して中断
+    if (filteredWords.length === 0) {
+        alert("指定した範囲に単語がありません。");
+        return [];
+    }
+
+    // 🟢 範囲が30単語ぴったり → ランダムに20単語出題
+    if (filteredWords.length === 30) {
+        return shuffleArray(filteredWords).slice(0, 20);
+    }
+
+    // 🟢 範囲が30より多い → ランダムに30問出題
+    if (filteredWords.length > numWords) {
         return shuffleArray(filteredWords).slice(0, numWords);
     }
+
+    // 🟢 範囲が30未満 → 全部出題
+    return shuffleArray(filteredWords);
+}
+
 
     function shuffleArray(arr) {
         for (let i = arr.length - 1; i > 0; i--) {
@@ -197,60 +212,74 @@ function playBeepSound() {
     }
 
     function showQuestion(word) {
-        document.getElementById('question').textContent = `日本語: ${word.jp}`;
-        document.getElementById('answer').innerHTML = `
-            英語: <input type="text" id="userAnswer" placeholder="英語の答えを入力">
-            <br>カタカナ: <input type="text" id="userKatakanaAnswer" placeholder="カタカナの答えを入力">
-            <button onclick="checkAnswer()">答える</button>`;
+    // 日本語の「、」「;」「；」を「・」に変換して表示
+    const jpText = word.jp.replace(/[、;；]/g, '・');
+    document.getElementById('question').textContent = `日本語: ${jpText}`;
+    document.getElementById('answer').innerHTML = `
+        英語: <input type="text" id="userAnswer" placeholder="英語の答えを入力">
+        <br>カタカナ: <input type="text" id="userKatakanaAnswer" placeholder="カタカナの答えを入力">
+        <button onclick="checkAnswer()">答える</button>`;
+}
+
+
+  function checkAnswer() {
+    // 現在の問題が存在するか安全確認
+    if (!testWords || !testWords[currentQuestionIndex]) return;
+
+    const word = testWords[currentQuestionIndex];
+    const userAnswer = document.getElementById('userAnswer').value.trim();
+    const userKatakanaAnswer = document.getElementById('userKatakanaAnswer').value.trim();
+
+    userAnswers.push({
+        jp: word.jp,
+        correct: word.en,
+        user: userAnswer,
+        katakana: userKatakanaAnswer
+    });
+
+    if (userAnswer.toLowerCase() === word.en.toLowerCase()) {
+        correctAnswers++;
     }
 
-    function checkAnswer() {
-        const word = testWords[currentQuestionIndex];
-        const userAnswer = document.getElementById('userAnswer').value.trim();
-        const userKatakanaAnswer = document.getElementById('userKatakanaAnswer').value.trim();
+    currentQuestionIndex++;
 
-        userAnswers.push({
-            jp: word.jp,
-            correct: word.en,
-            user: userAnswer,
-            katakana: userKatakanaAnswer
-        });
-
-        if (userAnswer.toLowerCase() === word.en.toLowerCase()) {
-            correctAnswers++;
-        }
-
-        currentQuestionIndex++;
-
-        if (currentQuestionIndex < 30) {
-            showQuestion(testWords[currentQuestionIndex]);
-        } else {
-            showResults();
-        }
+    // 出題数（testWords.length）に合わせて終了判定
+    if (currentQuestionIndex < testWords.length) {
+        showQuestion(testWords[currentQuestionIndex]);
+    } else {
+        showResults();
     }
+}
 
-    function showResults() {
-        document.getElementById('question').style.display = 'none';
-        document.getElementById('answer').style.display = 'none';
+    
 
-        let resultHTML = `<h2>テスト終了！</h2><p>正解数: ${correctAnswers} / 30</p>`;
-        resultHTML += `<table>
-            <tr><th>日本語</th><th>正解（英語）</th><th>あなたの答え</th><th>カタカナ</th></tr>`;
+ function showResults() {
+    document.getElementById('question').style.display = 'none';
+    document.getElementById('answer').style.display = 'none';
 
-        userAnswers.forEach(a => {
-            const isCorrect = a.user.toLowerCase() === a.correct.toLowerCase();
-            resultHTML += `
-                <tr style="background-color:${isCorrect ? '#c8e6c9' : '#ffcdd2'}">
-                    <td>${a.jp}</td>
-                    <td>${a.correct}</td>
-                    <td>${a.user}</td>
-                    <td>${a.katakana}</td>
-                </tr>`;
-        });
+    // 出題数に合わせて正解数を表示
+    let resultHTML = `<h2>テスト終了！</h2><p>正解数: ${correctAnswers} / ${testWords.length}</p>`;
+    resultHTML += `<table>
+        <tr><th>日本語</th><th>正解（英語）</th><th>あなたの答え</th><th>カタカナ</th></tr>`;
 
-        resultHTML += `</table>`;
-        document.getElementById('result').innerHTML = resultHTML;
-    }
+    userAnswers.forEach(a => {
+        const isCorrect = a.user.toLowerCase() === a.correct.toLowerCase();
+        // 日本語の「、」「;」「；」を「・」に変換
+        const jpText = a.jp.replace(/[、;；]/g, '・');
+        resultHTML += `
+            <tr style="background-color:${isCorrect ? '#c8e6c9' : '#ffcdd2'}">
+                <td>${jpText}</td>
+                <td>${a.correct}</td>
+                <td>${a.user}</td>
+                <td>${a.katakana}</td>
+            </tr>`;
+    });
+
+    resultHTML += `</table>`;
+    document.getElementById('result').innerHTML = resultHTML;
+}
+
+
 
     document.getElementById('startButton').addEventListener('click', async function() {
     await loadWords();
@@ -261,7 +290,7 @@ function playBeepSound() {
 
     // 🟢 追加：ユーザーが入力したテスト時間（分）を取得
     const testTimeMinutes = parseInt(document.getElementById('testTime').value, 10);
-    if (isNaN(testTimeMinutes) || testTimeMinutes <= 0) {
+    if (isNaN(testTimeMinutes) || testTimeMinutes < 0) {
         alert('テスト時間を正しく入力してください。');
         return;
     }
@@ -273,6 +302,7 @@ function playBeepSound() {
 
         // 🟢 入力したテスト時間を反映（分 → 秒）
         timeRemaining = testTimeMinutes * 60;
+       
         // 🟢 スタート直後に正しい残り時間を表示
         let minutes = Math.floor(timeRemaining / 60);
         let seconds = timeRemaining % 60;
@@ -280,6 +310,7 @@ function playBeepSound() {
         document.getElementById('timer').textContent = `${minutes}:${seconds}`;
 
         timerInterval = setInterval(updateTimer, 1000);
+        updateTimer();
     }
 });
 
